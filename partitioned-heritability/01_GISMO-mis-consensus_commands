@@ -1,0 +1,126 @@
+# Create inputs folder at gs://toga-human_hg38_reference/partitioned-heritability/inputs
+## 1000G_EUR_Phase3_plink 
+### From: gs://broad-alkesgroup-public-requester-pays/LDSCORE/1000G_Phase3_plinkfiles.tgz
+### gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/1000G_EUR_Phase3_plink/
+
+## hapmap3_snps
+### From: gs://broad-alkesgroup-public-requester-pays/LDSCORE/hapmap3_snps.tgz
+### gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/hapmap3_snps/
+### USING THIS INSTEAD: w_hm3.snplist
+
+## Baseline model
+### From: gs://broad-alkesgroup-public-requester-pays/LDSCORE/1000G_Phase3_baselineLD_v2.2_ldscores.tgz
+### gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/1000G_Phase3_baselineLD_v2.2_ldscores
+### USING THIS INSTEAD: gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/1000G_Phase3_baselineLD_ldscores
+
+## Weights
+### From: gs://broad-alkesgroup-public-requester-pays/LDSCORE/1000G_Phase3_weights_hm3_no_MHC.tgz
+### gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/1000G_Phase3_weights_hm3_no_MHC
+
+## Upload frqfile
+### From: gs://broad-alkesgroup-public-requester-pays/LDSCORE/1000G_Phase3_frq.tgz
+### gs://toga-human_hg38_reference/partitioned-heritability/inputs/reference/1000G_Phase3_frq
+
+
+## Upload gene sets (gene-coord and gene-set files) of decile and random deciles
+### Download most recent gencode.v44 from https://www.gencodegenes.org/human/
+
+
+
+
+
+### Generate gene-coord and gene-set files (locally)
+Rscript GISMO-mis_gencode-v24_annotate-ensembl.R
+### Send up to bucket
+gsutil -m cp -r inputs/decile/ gs://toga-human_hg38_reference/partitioned-heritability/inputs/GISMO-mis-consensus
+gsutil -m cp -r inputs/decile_rand/ gs://toga-human_hg38_reference/partitioned-heritability/inputs/GISMO-mis-consensus
+gsutil -m cp -r inputs/decile-list gs://toga-human_hg38_reference/partitioned-heritability/inputs/GISMO-mis-consensus
+
+
+
+# The rest of the computation happens on a VM
+### Start VM (e2-standard-16 for now)
+### Send up script to run
+gcloud compute scp --zone "us-central1-b" scripts/01_ldsc-run.sh rye@rye-gismo-mis:/home/rye/partitioned-heritability/scripts/
+### Connect to VM
+
+### Mount bucket
+MOUNT=/home/rye/toga-human_hg38_reference/
+mkdir -p "${MOUNT}"
+gcsfuse --implicit-dirs toga-human_hg38_reference "${MOUNT}"
+
+
+### Run ldsc for deciles and random deciles
+screen
+BUCKET=/home/rye/toga-human_hg38_reference/partitioned-heritability
+./01_ldsc-run.sh "${BUCKET}"/inputs "${BUCKET}"/inputs/GISMO-mis-consensus/decile-list GISMO-mis-consensus/decile /home/rye/partitioned-heritability/outputs
+BUCKET=/home/rye/toga-human_hg38_reference/partitioned-heritability
+./01_ldsc-run.sh "${BUCKET}"/inputs "${BUCKET}"/inputs/GISMO-mis-consensus/decile-list GISMO-mis-consensus/decile_rand /home/rye/partitioned-heritability/outputs
+
+
+
+# Copy outputs to bucket
+# gcloud auth login
+gsutil -m cp -r /home/rye/partitioned-heritability/outputs/GISMO-mis-consensus/decile/d* gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/
+gsutil -m cp -r /home/rye/partitioned-heritability/outputs/GISMO-mis-consensus/decile_rand/d* gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile_rand/
+
+# Detach bucket
+# gcloud auth revoke rye@broadinstitute.org
+fusermount -u "${MOUNT}"
+
+
+# All traits
+
+## Decile
+for i in {1..11}; do
+    BUCKET=/home/rye/toga-human_hg38_reference/partitioned-heritability
+    ./04_gwas-run.sh /home/rye/partitioned-heritability/outputs "${BUCKET}"/inputs/GISMO-mis-consensus/decile-list GISMO-mis-consensus/decile /home/rye/partitioned-heritability/outputs "${BUCKET}"/inputs/sumstats/ukb31063_ldsc/traits-list_"${i}" traits-list_"${i}"
+done
+gsutil -m cp -r /home/rye/partitioned-heritability/outputs/GISMO-mis-consensus/decile/GWAS/ gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile
+
+## Decile_rand
+for i in {1..11}; do
+    ./04_gwas-run.sh /home/rye/partitioned-heritability/outputs "${BUCKET}"/inputs/GISMO-mis-consensus/decile-list GISMO-mis-consensus/decile_rand /home/rye/partitioned-heritability/outputs "${BUCKET}"/inputs/sumstats/ukb31063_ldsc/traits-list_"${i}" traits-list_"${i}"
+done
+gsutil -m cp -r /home/rye/partitioned-heritability/outputs/GISMO-mis-consensus/decile_rand/GWAS/ gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile_rand
+
+
+## Merge results locally
+python3 ./scripts/05_part-herit_merge.py --indir gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/GWAS --traits gs://toga-human_hg38_reference/partitioned-heritability/inputs/sumstats/ukb31063_ldsc/gnomAD-LoF_650sumstats.tsv --groups gs://toga-human_hg38_reference/partitioned-heritability/inputs/GISMO-mis-consensus/decile-list --out gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/GWAS/merged_result.tsv > 05_part-herit_merge.log
+### Pull down
+gsutil cp gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/GWAS/merged_result.tsv .
+
+
+
+
+
+
+## psych traits
+BUCKET=/home/rye/toga-human_hg38_reference/partitioned-heritability
+./04_gwas-run_psych.sh /home/rye/partitioned-heritability/outputs "${BUCKET}"/inputs/GISMO-mis-consensus/decile-list GISMO-mis-consensus/decile /home/rye/partitioned-heritability/outputs/ "${BUCKET}"/inputs/sumstats/sumstats_v2/traits-list psych_traits
+gsutil -m cp -r /home/rye/partitioned-heritability/outputs/GISMO-mis-consensus/decile/GWAS/ gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/psych/
+
+## Merge results locally 
+python3
+import pandas as pd
+# Get traits
+traits_table = pd.read_table("gs://toga-human_hg38_reference/partitioned-heritability/inputs/sumstats/sumstats_v2/traits-list", header = None)
+traits = list(traits_table[0])
+traits = [d.split(".sumstats.gz")[0] for d in traits]
+
+# Read in groups list
+groups_table = pd.read_table("gs://toga-human_hg38_reference/partitioned-heritability/inputs/GISMO-mis-consensus/decile-list", header = None)
+groups = list(groups_table[0])
+
+final = pd.DataFrame()
+# Iterate through traits and construct merged table
+for trait in traits:
+    print(trait)
+    d = pd.read_table(f"gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/psych/GWAS/{trait}/{trait}.results", header = 0)
+    d = d.loc[d["Category"].isin([f"L2_{i}" for i in range(1, len(groups) + 1)])]
+    d['group'] = groups
+    d['trait'] = trait
+    final = pd.concat([final, d])
+
+final.to_csv("gs://toga-human_hg38_reference/partitioned-heritability/outputs/GISMO-mis-consensus/decile/psych/GWAS/merged_result.tsv", sep = "\t", index = False)
+
