@@ -7,13 +7,13 @@ library("viridis")
 library(ape)# Load
 library(phytools)
 library(vctrs)
-setwd("~/bd/ortholog/")
-gene_stat <- data.table::fread('gen.dist.withassembly.txt', data.table = F)  
+
+gene_stat <- data.table::fread('inputs/gen.dist.withassembly.txt', data.table = F)  
 gene_stat <- gene_stat[order(gene_stat$species, -abs(gene_stat$contig_N50_bp) ), ] #sort by id and drop lower quality genomes for duplicates
 gene_stat <- gene_stat[!duplicated(gene_stat$species),]
 
 #check full list
-o2o <- read.table('unmerged-species_combined_matrix_2023-07-26.tsv', header=T, stringsAsF=F)
+o2o <- read.table('inputs/unmerged-species_combined_matrix_2023-07-26.tsv', header=T, stringsAsF=F)
 colnames(o2o) <- gsub(".*_","",colnames(o2o)) 
 o2o[!o2o == "one2zero"] <- 0
 o2o[o2o == "one2zero"] <- 1
@@ -90,12 +90,12 @@ library(patchwork)
 library("viridis")   
 
 #ortholog missense test
-genedist <- data.table::fread('genestat_26-07-2023.txt', data.table = F)  
-x <- fread("~/bd/ortholog/outputs_consensus_consensus_v2_missense-counts.gz", stringsAsFactors = F, data.table=F)
+genedist <- data.table::fread('inputs/genestat_26-07-2023.txt', data.table = F)  
+x <- fread("inputs/consensus_v2_missense-counts.gz", stringsAsFactors = F, data.table=F)
 rownames(x) <- x$species
 x <- x[x$species %in% gene_stat$assembly_name,]
 x <- x[order(x$species),]
-syn <- fread("~/bd/ortholog/outputs_consensus_consensus_v2_synonymous-counts.gz", stringsAsFactors = F,data.table=F)
+syn <- fread("inputs/consensus_v2_synonymous-counts.gz", stringsAsFactors = F,data.table=F)
 syn <- syn[syn$species %in% gene_stat$assembly_name,]
 syn <- syn[order(syn$species),]
 x <- x[,colnames(x) %in% colnames(syn)]
