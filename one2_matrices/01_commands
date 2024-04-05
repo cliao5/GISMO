@@ -1,0 +1,27 @@
+# Gather all the needed orthologsClassification.tsv's for all species
+wget -r -p -nH --cut-dirs=3 -R index.html -A orthologsClassification.tsv.gz -e robots=off --no-check-certificate https://genome.senckenberg.de/download/TOGA/human_hg38_reference/ --random-wait
+
+
+# Generate unlabelled one2[x] matrix for unmerged species (unlabelled_matrix), as well as species names (names, uniq_names)
+for file in `find . -name "*orthologsClassification.tsv.gz"`; do species=`echo $file| cut -f3 -d "/"`; echo $species; gunzip -c $file | 
+grep orthology_class -v | cut -f1,5 | sort -k1,1 | uniq > ../matrix/$species.tsv; done
+
+
+# Merge all into a single intermediary matrix
+function multijoin() {
+    out=$1
+    shift 1
+    cat $1 | awk '{print $1}' > $out
+    for f in $*; do join $out $f > tmp; mv tmp $out; done
+}
+multijoin ../unlabelled_matrix *tsv
+
+
+# Grab all species names
+for file in `find . -name "*.tsv"`; do species=`echo $file|cut -f2 -d "/"|awk -F "." '{print $1}'`; echo $species; done > ../names
+cd ..; cat names | sort | uniq > names
+
+
+# Assign names to unlabelled matrix
+# Output moved to GenerateScore/inputs/unmerged-species_combined_matrix_2023-07-26.tsv
+Rscript assign-name.R
