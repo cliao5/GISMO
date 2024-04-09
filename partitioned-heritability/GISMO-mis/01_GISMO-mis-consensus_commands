@@ -44,7 +44,32 @@ gsutil -m cp -r inputs/decile-list gs://toga-human_hg38_reference/partitioned-he
 gcloud compute scp --zone "us-central1-b" scripts/01_ldsc-run.sh rye@rye-gismo-mis:/home/rye/partitioned-heritability/scripts/
 ### Connect to VM
 
-### Mount bucket
+# Set up
+sudo apt-get update
+sudo apt-get install git # git
+sudo apt-get install python3-pip # pip
+sudo apt-get install parallel # parallel
+
+## Conda
+wget https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh
+bash Miniconda3-latest-Linux-x86_64.sh
+rm Miniconda3-latest-Linux-x86_64.sh
+source .bashrc
+conda activate
+
+## ldsc
+git clone https://github.com/bulik/ldsc.git
+cd ldsc; conda env create --file environment.yml;
+conda activate ldsc; ./ldsc.py -h; ./munge_sumstats.py -h; conda deactivate
+
+## gcsfuse
+export GCSFUSE_REPO=gcsfuse-`lsb_release -c -s`
+echo "deb https://packages.cloud.google.com/apt $GCSFUSE_REPO main" | sudo tee /etc/apt/sources.list.d/gcsfuse.list
+curl https://packages.cloud.google.com/apt/doc/apt-key.gpg | sudo apt-key add -
+sudo apt-get update
+sudo apt-get install fuse gcsfuse
+
+## Mount bucket
 MOUNT=/home/rye/toga-human_hg38_reference/
 mkdir -p "${MOUNT}"
 gcsfuse --implicit-dirs toga-human_hg38_reference "${MOUNT}"
@@ -70,6 +95,8 @@ fusermount -u "${MOUNT}"
 
 
 # All traits
+## Send scripts up
+gcloud compute scp --zone "us-central1-b" 04_gwas-run.sh rye@rye-gismo-mis:/home/rye/partitioned-heritability/scripts/
 
 ## Decile
 for i in {1..11}; do
